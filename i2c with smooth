@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+import time
+from smbus2 import SMBus
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
+I2C_BUS    = 1
+SLAVE_ADDR = 0x08
+
+def read_touch():
+    with SMBus(I2C_BUS) as bus:
+        data = bus.read_i2c_block_data(SLAVE_ADDR, 0, 2)
+    return (data[0] << 8) | data[1]
+
+# Keep last 50 values
+history = [0] * 50
+
+# ---- Smoothing variables ----
+alpha = 0.25      # smoothing factor (0–1). Lower = smoother.
+smooth_value = 0  # initial smoothed value
+
+# Matplotlib setup
+plt.style.use("ggplot")
+fig, ax = plt.subplots()
+line, = ax.plot(history, lw=2)
+
+ax.set_ylim(0, 1023)
+ax.set_xlim(0, 50)
+ax.set_xlabel("Samples")
+ax.set_ylabel("Touch Value")
+ax.set_title("Live I2C Touch Data (Last 50 Samples + Smoothing)")
+
+def update(frame):
+    global history, smooth_value
+
+    try:
+        value = read_touch()
+    except:
+        value = 0
+
+    # ----------------------------------------------------------
+    # OPTION A: EXPONENTIAL SMOOTHING (VERY FAST, RECOMMENDED)
+    # ----------------------------------------------------------
+    smooth_value = alpha * value + (1 - alpha) * smooth_value
+
+    # ----------------------------------------------------------
+    # OPTION B: MOVING AVERAGE (comment above & uncomment below)
+    # ----------------------------------------------------------
+    # window = 5          # 5-sample moving average
+    # temp = history[-window:]
+    # smooth_value = sum(temp) / len(temp)
+    # ----------------------------------------------------------
+
+    history.append(smooth_value)
+    history = history[-50:]
+
+    line.set_ydata(history)
+    return line,
+
+ani = animation.FuncAnimation(fig, update, interval=5, blit=True)
+plt.show()
