@@ -7,41 +7,43 @@ import matplotlib.animation as animation
 I2C_BUS    = 1
 SLAVE_ADDR = 0x08
 
-# --- Your read function ---
 def read_touch():
     with SMBus(I2C_BUS) as bus:
         data = bus.read_i2c_block_data(SLAVE_ADDR, 0, 2)
     return (data[0] << 8) | data[1]
 
-# --- Data buffer for last 100 values ---
-history = [0] * 100
+# Keep last 50 values
+history = [0] * 50
 
-# --- Matplotlib setup ---
+# Matplotlib setup
+plt.style.use("ggplot")
 fig, ax = plt.subplots()
-line, = ax.plot(history)
-ax.set_ylim(0, 1023)  # adjust based on your sensor range
-ax.set_xlim(0, 100)
-ax.set_xlabel("Sample index")
-ax.set_ylabel("Touch value")
-ax.set_title("Live I2C Touch Sensor Graph (Scrolling)")
+line, = ax.plot(history, lw=2)
 
-# --- Animation update function ---
+ax.set_ylim(0, 1023)     # adjust to your sensor range
+ax.set_xlim(0, 50)
+ax.set_xlabel("Samples")
+ax.set_ylabel("Touch Value")
+ax.set_title("Live I2C Touch Data (Last 50 Samples)")
+
+# --- VERY FAST UPDATE FUNCTION ---
 def update(frame):
     global history
 
     try:
         value = read_touch()
-    except Exception as e:
-        print("I2C error:", e)
+    except:
         value = 0
 
-    # Add new value, keep last 100 samples
     history.append(value)
-    history = history[-100:]
+    history = history[-50:]
 
     line.set_ydata(history)
     return line,
 
-# --- Start animation ---
-ani = animation.FuncAnimation(fig, update, interval=10)  # ~100 Hz
+# Use blitting for speed
+ani = animation.FuncAnimation(
+    fig, update, interval=5, blit=True
+)
+
 plt.show()
