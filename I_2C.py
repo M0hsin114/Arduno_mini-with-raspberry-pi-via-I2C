@@ -7,41 +7,61 @@ import matplotlib.animation as animation
 I2C_BUS    = 1
 SLAVE_ADDR = 0x08
 
+NUM_CHANNELS = 8
+HISTORY_LEN  = 50
+
+# ---- Read 8 values (each 2 bytes) ----
 def read_touch():
     with SMBus(I2C_BUS) as bus:
-        data = bus.read_i2c_block_data(SLAVE_ADDR, 0, 2)
-    return (data[0] << 8) | data[1]
+        raw = bus.read_i2c_block_data(SLAVE_ADDR, 0, NUM_CHANNELS * 2)
 
-# Keep last 50 values
-history = [0] * 50
+    values = []
+    for i in range(NUM_CHANNELS):
+        high = raw[i*2]
+        low  = raw[i*2 + 1]
+        values.append((high << 8) | low)
 
-# Matplotlib setup
+    return values
+
+# ---- History for each channel ----
+history = [[0] * HISTORY_LEN for _ in range(NUM_CHANNELS)]
+
+# ---- Matplotlib Setup ----
 plt.style.use("ggplot")
 fig, ax = plt.subplots()
-line, = ax.plot(history, lw=2)
 
-ax.set_ylim(0, 1023)     # adjust to your sensor range
-ax.set_xlim(0, 50)
+lines = []
+colors = ["b", "g", "r", "c", "m", "y", "k", "orange"]
+
+for i in range(NUM_CHANNELS):
+    line, = ax.plot(history[i], lw=2, label=f"CH{i+1}", color=colors[i % len(colors)])
+    lines.append(line)
+
+ax.set_ylim(0, 20000)      # YOU MUST ADJUST THIS TO YOUR SENSOR RANGE
+ax.set_xlim(0, HISTORY_LEN)
 ax.set_xlabel("Samples")
-ax.set_ylabel("Touch Value")
-ax.set_title("Live I2C Touch Data (Last 50 Samples)")
+ax.set_ylabel("Sensor Value")
+ax.set_title("Live I2C Multichannel Touch Data")
+ax.legend(loc="upper left")
 
-# --- VERY FAST UPDATE FUNCTION ---
+# ---- Update Loop ----
 def update(frame):
     global history
 
     try:
-        value = read_touch()
+        values = read_touch()   # read 8 channels
     except:
-        value = 0
+        values = [0] * NUM_CHANNELS
 
-    history.append(value)
-    history = history[-50:]
+    # Update each history buffer
+    for ch in range(NUM_CHANNELS):
+        history[ch].append(values[ch])
+        history[ch] = history[ch][-HISTORY_LEN:]  # keep last 50
 
-    line.set_ydata(history)
-    return line,
+        lines[ch].set_ydata(history[ch])
 
-# Use blitting for speed
+    return lines
+
 ani = animation.FuncAnimation(
     fig, update, interval=5, blit=True
 )
